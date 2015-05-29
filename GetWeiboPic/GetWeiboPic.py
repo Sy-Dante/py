@@ -24,14 +24,13 @@ def get_user_info(url):
     return dict {'name' : name, 'uid' : uid}
     """
     if url.isdigit():
-        url = 'http://weibo.com/u/%s' % url
+        url = 'http://weibo.com/%s' % url
     uid = urlparse.urlparse(url).path.split('/')[-1]
-    # if not uid.isdigit():
-    #     exit('url error, please check.')
+    if not uid.isdigit():
+        exit('url error, please check.')
     try:
         print url
-        headers = {'User-Agent': 'Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1)'}
-        content = requests.get(url, headers = headers).content
+        content = requests.get(url).content
         soup = BeautifulSoup(content)
         print soup
         name = soup.find('meta', attrs = {'name' : 'keywords'})['content']
@@ -122,4 +121,20 @@ def format_time(tsp = 0):
     time_struct = time.localtime(tsp)
     return time.strftime("[%Y-%m-%d %H：%M：%S]", time_struct)
 
-get_weibo_pic_start('http://photo.weibo.com/5228056212/wbphotos/large/mid/3847630885345258/pid/005HOofijw1eskfexs3zwj305k05kdg7')
+#!/usr/bin/env python  
+# -*- coding: utf-8 -*-  
+  
+import weiboLogin
+import urllib
+import urllib2
+  
+username = ''
+pwd = ''
+
+WBLogin = weiboLogin.weiboLogin()
+WBLogin.login(username, pwd)
+
+
+
+
+get_weibo_pic_start('http://weibo.com/u/5228056212')

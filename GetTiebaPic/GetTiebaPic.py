@@ -18,71 +18,17 @@ sys.setdefaultencoding("utf-8")
 #         pass
 
 
-def get_tieba_pic_start(url):
-    '''
-    运行
-    @arg    url: 百度贴吧帖子链接
-    @return 下载图片到【./tieba/】
-    PS：只能下载楼主所发图片。
-    '''
-    # 通过id直接拿：http://imgsrc.baidu.com/forum/pic/item/ee00853eb13533fa1e49791fadd3fd1f40345b59.jpg
-
-    # 'http://tieba.baidu.com/photo/g/bw/picture/list?alt=jview&rn=200&pn=1&ps=1&pe=1&' # + 'kw = %s & tid = %s'  pe为要获得的图片数量
-    # 'http://tieba.baidu.com/photo/bw/picture/guide?from_page=0&alt=jview&next=999999&prev=999999&' # + 'kw = %s & tid = %s & pic_id = %s &see_lz=0'
-    # 查看大图的链接[并没什么用] 'http://tieba.baidu.com/photo/p?' # + 'kw = %s & tid = %s & pic_id = %s '
-
-    # # json_1 # 
-    # model 1
-    # 贴吧图册基本都是通过这个链接获取，效果良好
-    # 可以获得缩略图的链接[json][#并没什么用][因为json_2链接显示不全，所以改用这个链接，能获取到图片ID就好]
-    pic_json_url_s1 = 'http://tieba.baidu.com/photo/g/bw/picture/list?alt=jview&rn=200&pn=1&ps=1&pe=999999&' # + 'kw = %s & tid = %s'  pe为要获得的图片数量
-
-    # # json_2 # 
-    # model 0
-    # 可以获得缩略图的链接[json][只能获取部分图片]
-    pic_json_url_s2 = 'http://tieba.baidu.com/photo/bw/picture/guide?from_page=0&alt=jview&next=15&prev=15&see_lz=0&'   # + 'kw = %s & tid = %s & pic_id = %s &see_lz=0'
-
-    # 此链接可以通过ID直接获取到原图
-    pic_url_s = 'http://imgsrc.baidu.com/forum/pic/item/'  # + pic_id
-    try:
-        print 'getting infomation, please waiting...'
-        info = get_info(url)
-        print 'get sucessfully!'
-        path = get_download_path(info)
-
-        # 获取json链接
-        pic_json_url = get_pic_json_url(pic_json_url_s1, info)
-        # 获取json信息
-        pic_json = get_pic_json(pic_json_url)
-
-        if pic_json['error'] != "sucess!":
-            # 普通帖子只能通过以下方式获得json
-            # 获取json链接
-            pic_json_url = get_pic_json_url(pic_json_url_s2, info)
-            # 获取json信息
-            pic_json = get_pic_json_full(pic_json_url)
-            # print json.dumps(pic_json, sort_keys = True, indent = 4)
-            # exit()
-            # 格式化为通用json
-            pic_json = create_json(pic_json, 0)
-        else:
-            # 格式化为通用json
-            pic_json = create_json(pic_json)
-
-        download_pic(pic_json, pic_url_s, path, True)
-    except Exception,e:
-        exit(e)
-
 
 def get_info(url):
     '''
     获取url信息: title, kw, tid, url
-
+    return dict {'title' : title, 'kw' : kw, 'tid' : tid, 'url' : url}
     '''
+    if url.isdigit():
+        url = 'http://tieba.baidu.com/p/%s' % url
     content = requests.get(url).content
     soup = BeautifulSoup(content)
 
-    re_title = '<title>(.*?)</title>'
     # 用title做文件名，所以需要转义一些非法字符
     title = re.sub('[\\\/\:\*\?\|\"<>]', '_', soup.find('title').text)
     try:
@@ -99,12 +45,16 @@ def get_info(url):
                 raise Exception
         except Exception:
             exit('url error, please check.')
-    # url = '_'.join(url.split('/')[2:])
+    url = '_'.join(url.split('/')[2:])
     return {'title' : title, 'kw' : kw, 'tid' : tid, 'url' : url}
 
-def get_download_path(info):
-    title = info['title']
-    title += ' @ %s_%s' % (info['kw'], info['tid'])
+def get_download_path(info, total):
+    """
+    创建下载路径：
+    """
+    title = '[%d]%s' % (total, info['title'])
+    title += ' @ %s' % (info['url'])
+    # title += ' @ %s_%s' % (info['kw'], info['tid'])
     title = re.sub('[\\\/\:\*\?\|\"<>]', '_', title)
     # 在当前目录下创建文件夹
     print title
@@ -112,7 +62,8 @@ def get_download_path(info):
     path = os.path.join(path,info['kw'])
     path = os.path.join(path,title.decode('utf-8'))
     if not os.path.exists(path):
-        os.mkdir(path)
+        os.makedirs(path)
+        # os.mkdir(path)
     return path
 
 def get_pic_json_url(pic_json_addr_s, info):
@@ -128,7 +79,7 @@ def get_pic_json_full(json_url):
     json_info = get_pic_json(json_url)
     total = json_info['data']['pic_amount']
     index = 30
-    for i in range(total/15):
+    for i in range(total/15+1):
         # print i
         # print json_info['data']['pic_list'][pos]['img']['medium']['id']
         try:
@@ -148,8 +99,8 @@ def get_pic_json_full(json_url):
 def create_json(json_info, model = 1):
     # print json.dumps(json_info, sort_keys = True, indent = 4)
     if json_info['error'] != "sucess!":
-        print 'json get error: %s\njson url: %s' % (pic_json['error'], pic_json['url'])
-        exit('sdsfd')
+        print 'json get error: %s\njson url: %s' % (json_info['error'], json_info['url'])
+        exit()
         return
     new_json = {}
     pic_list = []
@@ -182,14 +133,16 @@ def create_json(json_info, model = 1):
     return new_json
 
 
-def download_pic(json_info, pic_url_s, path, show_descr = False):
+def download_pic(json_info, pic_url_s, info, show_descr = False):
     # print json.dumps(json_info,sort_keys=True,indent=4)
     total_num = json_info['total']
     if total_num:
+        path = get_download_path(info, total_num)
         print 'picture amount:',total_num
         print 'download start:'
         last_pid = ''
         num = 1
+        download_error = 0
         for pic in json_info['list']:
             pic_descr = pic['id'].encode('utf-8')
             pic_url = pic['url']
@@ -200,20 +153,74 @@ def download_pic(json_info, pic_url_s, path, show_descr = False):
                 fpic = requests.get(pic_url).content
                 file_name = '[%03d]%s.%s' % (index, pic_descr, pic_ext) if show_descr else '%03d.%s' % (index, pic_ext)
                 file_name = re.sub('[\\\/\:\*\?\|\"<>]', '_', file_name)
-                print 'download %d%% : %s' % (num * 100 / total_num, file_name)
+                print '%03d.download %d%% : %s' % (num, num * 100 / total_num, file_name)
                 file_path = os.path.join(path,file_name)
                 with open(file_path, 'wb') as f:
                     f.write(fpic)
             except Exception,e:
                 print '\n----------\n\ndownload failed! \n URL: %s\n Error: %s\n\n----------\n' % (pic_url, e)
+                download_error += 1
             num += 1
     else:
         print 'picture not found!'
-    print 'download complete!'
+    print 'download complete!\n\tsuccessful : %d\n\tfailed : %d\n' % (total_num-download_error, download_error)
+
+def get_tieba_pic_start(url):
+    '''
+    运行
+    @arg    url: 百度贴吧帖子链接
+    @return 下载图片到【./tieba/】
+    PS：只能下载楼主所发图片。
+    '''
+    # 通过id直接拿：http://imgsrc.baidu.com/forum/pic/item/ee00853eb13533fa1e49791fadd3fd1f40345b59.jpg
+
+    # 'http://tieba.baidu.com/photo/g/bw/picture/list?alt=jview&rn=200&pn=1&ps=1&pe=1&' # + 'kw = %s & tid = %s'  pe为要获得的图片数量
+    # 'http://tieba.baidu.com/photo/bw/picture/guide?from_page=0&alt=jview&next=999999&prev=999999&' # + 'kw = %s & tid = %s & pic_id = %s &see_lz=0'
+    # 查看大图的链接[并没什么用] 'http://tieba.baidu.com/photo/p?' # + 'kw = %s & tid = %s & pic_id = %s '
+
+    # # json_1 # 
+    # model 1
+    # 贴吧图册基本都是通过这个链接获取，效果良好
+    # 可以获得缩略图的链接[json][#并没什么用][因为json_2链接显示不全，所以改用这个链接，能获取到图片ID就好]
+    pic_json_url_s1 = 'http://tieba.baidu.com/photo/g/bw/picture/list?alt=jview&rn=200&pn=1&ps=1&pe=999999&' # + 'kw = %s & tid = %s'  pe为要获得的图片数量
+
+    # # json_2 # 
+    # model 0
+    # 可以获得缩略图的链接[json][只能获取部分图片]
+    pic_json_url_s2 = 'http://tieba.baidu.com/photo/bw/picture/guide?from_page=0&alt=jview&next=15&prev=15&see_lz=0&'   # + 'kw = %s & tid = %s & pic_id = %s &see_lz=0'
+
+    # 此链接可以通过ID直接获取到原图
+    pic_url_s = 'http://imgsrc.baidu.com/forum/pic/item/'  # + pic_id
+    try:
+        print 'getting infomation, please waiting...'
+        info = get_info(url)
+        # 获取json链接
+        pic_json_url = get_pic_json_url(pic_json_url_s1, info)
+        # 获取json信息
+        pic_json = get_pic_json(pic_json_url)
+
+        if pic_json['error'] != "success!":
+            # 普通帖子只能通过以下方式获得json
+            # 获取json链接
+            pic_json_url = get_pic_json_url(pic_json_url_s2, info)
+            # 获取json信息
+            pic_json = get_pic_json_full(pic_json_url)
+            # print json.dumps(pic_json, sort_keys = True, indent = 4)
+            # exit()
+            # 格式化为通用json
+            pic_json = create_json(pic_json, 0)
+        else:
+            # 格式化为通用json
+            pic_json = create_json(pic_json)
+
+        print 'get successfully!'
+        download_pic(pic_json, pic_url_s, info, True)
+    except Exception,e:
+        exit(e)
 
 
 
-url = 'http://tieba.baidu.com/p/3191028878'
+url = 'http://tieba.baidu.com/p/2815006867'
 get_tieba_pic_start(url)
 
 
