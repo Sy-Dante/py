@@ -16,6 +16,8 @@ sys.setdefaultencoding("utf-8")
 # pic_list_url : 根据uid和相册album_id获取相册所有照片信息：http://photo.weibo.com/photos/get_all?uid=5228056212&album_id=3736693483152486&count=30&page=1&type=3&__rnd=1432862078693
 # pic_url : 照片地址为：pic_host + '/large/' + pic_name
 
+headers = {'User-Agent': 'Baiduspider ( http://www.baidu.com/search/spider.htm)'}
+
 def get_user_info(url):
     """
     获取用户信息，包括：
@@ -29,16 +31,15 @@ def get_user_info(url):
     if not uid.isdigit():
         exit('url error, please check.')
     try:
-        print url
-        content = requests.get(url).content
+        # print url
+        content = requests.get(url, headers = headers).content
         soup = BeautifulSoup(content)
-        print soup
-        name = soup.find('meta', attrs = {'name' : 'keywords'})['content']
+        # print soup
+        name = soup.find('meta', attrs = {'name' : 'keywords'})['content'].split('，')[0]
     except Exception,e:
-        print e
         name = uid
-    print name
-    exit()
+    # print name
+    # exit()
     print 'Weibo name is : %s' % name
     return {'name' : name, 'uid' : uid}
 
@@ -48,7 +49,9 @@ def get_album_list_json(uid):
     return json
     """
     alb_list_url = 'http://photo.weibo.com/albums/get_all?uid=%s&count=99' % uid
-    albums_content = requests.get(alb_list_url).content
+    albums_content = requests.get(alb_list_url, headers = headers).content
+    print unicode(albums_content, 'cp936')
+    exit()
     albums_json = json.loads(unicode(albums_content, 'cp936'))
     return albums_json
 
@@ -58,7 +61,7 @@ def get_pic_list_json(uid, album_id):
     return json
     """
     pic_list_url = 'http://photo.weibo.com/photos/get_all?uid=%s&album_id=%s&count=9999' % (uid, album_id)
-    pic_content = requests.get(pic_list_url).content
+    pic_content = requests.get(pic_list_url, headers = headers).content
     pic_json = json.loads(unicode(pic_content, 'cp936'))
     return pic_json
 
@@ -120,21 +123,5 @@ def format_time(tsp = 0):
         tsp = time.time()
     time_struct = time.localtime(tsp)
     return time.strftime("[%Y-%m-%d %H：%M：%S]", time_struct)
-
-#!/usr/bin/env python  
-# -*- coding: utf-8 -*-  
-  
-import weiboLogin
-import urllib
-import urllib2
-  
-username = ''
-pwd = ''
-
-WBLogin = weiboLogin.weiboLogin()
-WBLogin.login(username, pwd)
-
-
-
 
 get_weibo_pic_start('http://weibo.com/u/5228056212')
