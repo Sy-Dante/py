@@ -124,7 +124,8 @@ def get_user_info(url):
         name = soup.find('meta', attrs = {'name' : 'keywords'})['content'].split('，')[0]
     except Exception:
         name = uid
-    print('Weibo name is : %s' % name)
+    msg = u'Weibo name is : %s' % name
+    print(msg.encode('utf-8'))
     return name, uid
 
 def get_album_list_json(uid):
@@ -172,7 +173,7 @@ def create_path(path_name):
         path: 路径如 ./weibo/sy/face_album.
     """
     path = os.getcwd()
-    path = os.path.join(os.getcwd(), ('weibo/%s' % path_name).decode('utf-8'))
+    path = os.path.join(os.getcwd(), 'weibo/%s' % path_name)
     if not os.path.exists(path):
         os.makedirs(path)
     return path
@@ -207,7 +208,7 @@ def download_pic(pic_json, path, download_num, download_error,
             pic_caption = re.sub('[\\\/\:\*\?\|\"<>]', '_', caption)
             pic_content = pic['caption']
             pic_ext = os.path.splitext(pic['pic_name'])[1]
-            pic_name = '%s%s%s' % (pic_time, pic_caption, pic_ext)
+            pic_name = u'%s%s%s' % (pic_time, pic_caption, pic_ext)
             # 判断是否属于同一微博图片
             if pic_name == last_pic_name:
                 pic_index += 1
@@ -217,32 +218,32 @@ def download_pic(pic_json, path, download_num, download_error,
                     weibo_file.write('\t\t</ul>\n\t</div>\n')
                 pic_index = 1
                 # 写入微博信息
-                weibo_file.write('\t<div class="time">发博时间：%s</div>\n\t'
-                                '<div class="content" title="%s">%s</div>\n\t'
-                                '<div class="pic">\n\t\t<ul>\n'
-                                % (pic_time, pic['caption_render'], pic_content))
+                weibo_file.write((u'\t<div class="time">发博时间：%s</div>\n\t'
+                                 '<div class="content" title="%s">%s</div>\n\t'
+                                 '<div class="pic">\n\t\t<ul>\n'
+                                 % (pic_time, pic['caption_render'], pic_content)).encode('utf-8'))
             last_pic_name = pic_name
-            pic_name = '%s[%d]%s%s' % (pic_time, pic_index, pic_caption, pic_ext)
+            pic_name = u'%s[%d]%s%s' % (pic_time, pic_index, pic_caption, pic_ext)
             pic_name = re.sub('#', '＃', pic_name)
             # 写入图片信息
-            weibo_file.write('\t\t\t<li><img src="./%s" title="%s" /></li>\n'
-                              % (pic_name, pic['caption_render']))
+            weibo_file.write((u'\t\t\t<li><img src="./%s" title="%s" /></li>\n'
+                              % (pic_name, pic['caption_render'])).encode('utf-8'))
             # continue
             # 保存图片
-            file_path = os.path.join(path,pic_name)
+            file_path = os.path.join(path,pic_name.encode('utf-8'))
             if not os.path.exists(file_path):
-                print('% 3d / % 3d. download %d%% : %s'
-                      % (download_num, pic_num, download_num * 100 / pic_num, pic_name))
+                print((u'% 3d / % 3d. download %d%% : %s'
+                      % (download_num, pic_num, download_num * 100 / pic_num, pic_name)).encode('utf-8'))
                 fpic = requests.get(pic_url).content
                 with open(file_path, 'wb') as f:
                     f.write(fpic)
             else:
-                print('% 3d / % 3d. download %d%% : file exists, ignore download!'
-                      % (download_num, pic_num, download_num * 100 / pic_num))
+                print((u'% 3d / % 3d. download %d%% : File already exists! Ignore download.'
+                      % (download_num, pic_num, download_num * 100 / pic_num)).encode('utf-8'))
                 # continue
         except Exception,e:
-            print('\n----------\n\ndownload failed!\n Picture url: %s\n'
-                  ' Error: %s\n\n----------\n' % (pic_url, e))
+            print((u'\n----------\n\nThis picture download failed!\n Picture url: %s\n'
+                  ' Error: %s\n\n----------\n' % (pic_url, e)).encode('utf-8'))
             download_error += 1
     return download_num, download_error, last_pic_name, pic_index
 
@@ -289,7 +290,7 @@ def get_weibo_pic_run(url, amount=9999):
                 path = create_path(path_name)
                 # 下载所用变量初始化（已下载数，下载失败数，上一个图片名，图片序号）
                 download_num, download_error, last_pic_name, pic_index = 0, 0, '', 1
-                print(('%s : Total %s , downloading...' % (album_name, pic_num)).decode('utf-8'))
+                print((u'%s : Total %s , downloading...' % (album_name, pic_num)).encode('utf-8'))
                 # 总页数
                 count_page = int(math.ceil(pic_num / pic_count))
                 current_page = 1
@@ -306,7 +307,7 @@ def get_weibo_pic_run(url, amount=9999):
                                      '<div class="num">图片数量：%d</div>\n'
                                      '<div class="weibo">\n' % (album_name, format_time(), pic_num))
                     for i in range(count_page):
-                        print('\n---\ncurrent: %s / count: %s ' % (current_page, count_page))
+                        print((u'\n---\ncurrent: %s / count: %s ' % (current_page, count_page)).encode('utf-8'))
                         # continue
                         # 获取相册json信息
                         pic_json = get_pic_list_json(uid, album_id, pic_type, current_page, pic_count)
@@ -320,10 +321,10 @@ def get_weibo_pic_run(url, amount=9999):
                                 '<div class="update">更新时间：%s</div>\n'
                                 '<div class="num">图片数量：%d</div>\n'
                                 % (album_name, format_time(), download_num))
-                print('download complete!\n\tsuccessful : %d\n\tfailed : %d\n'
-                       % (download_num, download_error))
+                print((u'download complete!\n\tsuccessful : %d\n\tfailed : %d\n'
+                                       % (download_num, download_error)).encode('utf-8'))
             else:
-                print('%s is empty!' % album_name)
+                print((u'%s is empty!' % album_name).encode('utf-8'))
     else:
         print('not found albums!')
     info_file.close()
@@ -378,26 +379,28 @@ def pr_e(arg='STOP'):
 
 
 if __name__ == '__main__':
-    conf = ConfigParser.ConfigParser()
-    conf.read('user.conf')
-    name = conf.get('weibo', 'name')
-    pw = conf.get('weibo', 'pw')
-    if wblogin(name, pw):
-        print('login successful!')
-        try:
+    try:
+        conf = ConfigParser.ConfigParser()
+        conf.read('user.conf')
+        name = conf.get('weibo', 'name')
+        pw = conf.get('weibo', 'pw')
+        if wblogin(name, pw):
+            print('login successful!')
             get_weibo_pic({
-                    'XiaoAi': '3050708243',
-                    'LuLi': '3669076064',
-                    'Monster': '5230466807',
-                    'XiaoJu': '3669102477',
-                    'Sheep': '5228056212',
-                    'LuBao': '5229864870',
+                    # 'XiaoAi': '3050708243',
+                    # 'LuLi': '3669076064',
+                    # 'Monster': '5230466807',
+                    # 'XiaoJu': '3669102477',
+                    # 'Sheep': '5228056212',
+                    # 'LuBao': '5229864870',
+                    'test': '5581868113'
                 })
-            os.system('pause')
-        except Exception, e:
-            print('download failed!\nError: %s' % e)
-    else:
-        print('login failed!')
+        else:
+            print('login failed!')
+    except Exception, e:
+        print('Download failed!\nError: %s' % e)
+    finally:
+        os.system('pause')
 
 
 

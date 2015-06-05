@@ -55,12 +55,12 @@ def get_download_path(info, total):
     title = '[%d]%s' % (total, info['title'])
     title += ' @ %s' % (info['url'])
     # title += ' @ %s_%s' % (info['kw'], info['tid'])
-    title = re.sub('[\\\/\:\*\?\|\"<>]', '_', title)
+    title = re.sub('[\\\/\:\*\?\|\"<>]', '_', title).encode('utf-8')
     # 在当前目录下创建文件夹
     print title
     path = os.getcwd()
     path = os.path.join(path,info['kw'])
-    path = os.path.join(path,title.decode('utf-8'))
+    path = os.path.join(path,title)
     if not os.path.exists(path):
         os.makedirs(path)
         # os.mkdir(path)
@@ -99,8 +99,7 @@ def get_pic_json_full(json_url):
 def create_json(json_info, model = 1):
     # print json.dumps(json_info, sort_keys = True, indent = 4)
     if json_info['error'] != "sucess!":
-        print 'json get error: %s\njson url: %s' % (json_info['error'], json_info['url'])
-        exit()
+        exit('json get error: %s\njson url: %s' % (json_info['error'], json_info['url']))
         return
     new_json = {}
     pic_list = []
@@ -138,7 +137,7 @@ def download_pic(json_info, pic_url_s, info, show_descr = False):
     total_num = json_info['total']
     if total_num:
         path = get_download_path(info, total_num)
-        print 'picture amount:',total_num
+        print 'picture amount: %s' % total_num
         print 'download start:'
         last_pid = ''
         num = 1
@@ -150,13 +149,17 @@ def download_pic(json_info, pic_url_s, info, show_descr = False):
             pic_url = pic_url_s + pic_url.split('/')[-1]
             pic_ext = pic_url.split('.')[-1]
             try:
-                fpic = requests.get(pic_url).content
                 file_name = '[%03d]%s.%s' % (index, pic_descr, pic_ext) if show_descr else '%03d.%s' % (index, pic_ext)
                 file_name = re.sub('[\\\/\:\*\?\|\"<>]', '_', file_name)
-                print '%03d.download %d%% : %s' % (num, num * 100 / total_num, file_name)
                 file_path = os.path.join(path,file_name)
-                with open(file_path, 'wb') as f:
-                    f.write(fpic)
+                if not os.path.exists(file_path):
+                    print '%03d.download %d%% : %s' % (num, num * 100 / total_num, file_name)
+                    fpic = requests.get(pic_url).content
+                    with open(file_path, 'wb') as f:
+                        f.write(fpic)
+                else:
+                    print '%03d.download %d%% : File already exists! Ignore.' % (num, num * 100 / total_num)
+
             except Exception,e:
                 print '\n----------\n\ndownload failed! \n URL: %s\n Error: %s\n\n----------\n' % (pic_url, e)
                 download_error += 1
@@ -220,8 +223,13 @@ def get_tieba_pic_start(url):
 
 
 
-url = 'http://tieba.baidu.com/p/2815006867'
-get_tieba_pic_start(url)
+url = '2542605428'
+try:
+    get_tieba_pic_start(url)
+except Exception, e:
+    print e
+finally:
+    os.system('Pause')
 
 
 # raw_input('please enter anykey to close window.')
