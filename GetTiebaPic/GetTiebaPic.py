@@ -36,14 +36,14 @@ def get_info(url):
         params = urlparse.parse_qs(result.query,True)
         kw = params['kw'][0]
         tid = params['tid'][0]
-    except Exception:
+    except:
         try:
             kw = soup.find('meta', attrs = {'fname' : True})['fname']
             url = url.split('?')[0].split('#')[0]
             tid = url.split('/')[-1]
             if not tid.isdigit():
-                raise Exception
-        except Exception:
+                raise TypeError('tid isn`t a number.')
+        except:
             exit('url error, please check.')
     url = '_'.join(url.split('/')[2:])
     return {'title' : title, 'kw' : kw, 'tid' : tid, 'url' : url}

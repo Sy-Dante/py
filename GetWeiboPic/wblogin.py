@@ -97,7 +97,7 @@ def wblogin(username, password):
             raise Exception('login failed!\nreason: %s' % json_data['reason'])
         # return json.loads(login_str)
     except Exception, e:
-        logging.exception(e)
+        print(e)
         raise Exception('login failed!')
 
 # --------------------------------------------------------------------------------------
@@ -179,7 +179,8 @@ def create_path(path_name):
         path: 路径如 ./weibo/sy/face_album.
     """
     path = os.getcwd()
-    path = os.path.join(os.getcwd(), 'weibo/%s' % path_name)
+    path = os.path.join(path, 'weibo')
+    path = os.path.join(path, path_name)
     if not os.path.exists(path):
         os.makedirs(path)
     return path
@@ -281,7 +282,7 @@ def get_weibo_pic_run(url, amount=99999):
                 pic_type = album['type']
                 album_name = ('%s' % caption).decode('utf-8')
                 # 图片存储路径
-                path_name = '%s/%s' % (name, album_name)
+                path_name = os.path.join(name, album_name)
                 try:
                     # 微博配图没有这个数据，所以可以用于判断是否为微博配图
                     is_set = album['cover_photo_id']
@@ -344,9 +345,7 @@ def format_time(tsp=0):
     Returns:
         返回格式化好的时间.
     """
-    if not tsp:
-        tsp = time.time()
-    time_struct = time.localtime(tsp)
+    time_struct = time.localtime(tsp if tsp else time.time())
     return time.strftime("[%Y-%m-%d %H：%M：%S]", time_struct)
 
 def get_weibo_pic(urls, amounts=99999):
@@ -406,7 +405,7 @@ if __name__ == '__main__':
         logging.exception(e)
     finally:
         runtime = time.clock() - start
-        print('run time: %dmin %dsec' % (runtime // 60, runtime % 60))
+        print('\n-------------\nrun time: %dmin %dsec' % (runtime // 60, runtime % 60))
         os.system('pause')
 
 
