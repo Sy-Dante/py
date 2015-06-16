@@ -223,7 +223,7 @@ def get_tieba_pic_start(url):
 
 
 
-url = '2542605428'
+url = 'http://tieba.baidu.com/p/3828722569'
 try:
     get_tieba_pic_start(url)
 except Exception, e:

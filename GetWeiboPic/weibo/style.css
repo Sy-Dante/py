@@ -4,7 +4,7 @@
 }
 body {
     margin: 0px auto;
-    width: 1000px;
+    max-width: 1000px;
     padding: 10px;
 }
 .update, .num {
@@ -29,6 +29,7 @@ li {
     max-height: 100px;
     max-width: 100px;
     cursor: zoom-in;
+    display: block;
 }
 .weibo {
     border-radius: 15px;

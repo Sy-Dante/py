@@ -27,10 +27,29 @@ from bs4 import BeautifulSoup
 import math
 import ConfigParser
 import logging
+import threading
 
 import sys
 reload(sys)
 sys.setdefaultencoding("utf-8")
+
+def pr_e(arg='STOP'):
+    """断点调试.
+    """
+    try:
+        print(json.dumps(arg, sort_keys=True, indent=4))
+        print(' ↑↑\n ↑↑\tIt`s used json.dumps().\n')
+    except:
+        print(arg)
+    exit()
+
+# 头信息
+html_meta = '<meta content="text/html; charset=utf-8" http-equiv="Content-Type" />\n'
+# js脚本
+html_js = '\n<script type="text/javascript">window.onload=function(){var img = document.querySelectorAll(".pic img"); var len = img.length; var padding = 80; for (var i = 0; i < len; i++){img[i].onclick = function(){if (this.offsetWidth <= 100 || this.offsetHeight <= 100){var width = window.innerWidth - padding > this.naturalWidth ? this.naturalWidth : window.innerWidth - padding; var height = this.naturalHeight * (width / this.naturalWidth); this.style.maxWidth = width; this.style.maxHeight = height; this.style.cursor = "zoom-out"; }else{this.style.maxWidth = 100; this.style.maxHeight = 100; this.style.cursor = "zoom-in"; } } } }</script>\n'
+# css样式
+html_css = '\n<style type="text/css">* {padding: 0px; margin: 0px; } body {margin: 0px auto; max-width: 1000px; padding: 10px; } .update, .num {padding: 10px 0px 10px 670px; font-weight: bolder; color: grey; } ul::after {content:""; display: block; clear: both; } li {float: left; list-style: none; margin: 5px; border: 1px solid gold; padding: 1px; box-shadow: 0 0 5px gold; } .pic img {max-height: 100px; max-width: 100px; cursor: zoom-in; display: block; } .weibo {border-radius: 15px; border: 1px solid grey; padding: 10px; box-shadow: 0 0 5px grey; } .time {border-radius: 5px; border: 1px solid pink; padding: 2px; box-shadow: 0 0 5px pink; margin-bottom: 5px; } .content {border-radius: 5px; border: 1px solid lightblue; padding: 2px; box-shadow: 0 0 5px lightblue; margin-bottom: 5px; } .pic {border-radius: 5px; border: 1px solid lightblue; padding: 2px; box-shadow: 0 0 5px lightblue; margin-bottom: 25px; }</style>\n'
+
 
 WBCLIENT = 'ssologin.js(v1.4.5)'
 user_agent = (
@@ -130,7 +149,7 @@ def get_user_info(url):
         name = soup.find('meta', attrs = {'name' : 'keywords'})['content'].split('，')[0]
     except Exception:
         name = uid
-    msg = u'Weibo name is : %s' % name
+    msg = u'Weibo name is : %s\n' % name
     print(msg.encode('utf-8'))
     return name, uid
 
@@ -226,18 +245,23 @@ def download_pic(pic_json, path, download_num, download_error,
                 pic_index = 1
                 # 写入微博信息
                 weibo_file.write((u'\t<div class="time">发博时间：%s</div>\n\t'
-                                 '<div class="content" title="%s">%s</div>\n\t'
+                                 '<div class="content">%s</div>\n\t'
                                  '<div class="pic">\n\t\t<ul>\n'
-                                 % (pic_time, pic['caption_render'], pic_content)).encode('utf-8'))
+                                 % (pic_time, pic_content)).encode('utf-8'))
             last_pic_name = pic_name
             pic_name = u'%s[%d]%s%s' % (pic_time, pic_index, pic_caption, pic_ext)
             pic_name = re.sub('#', '＃', pic_name)
             # 写入图片信息
-            weibo_file.write((u'\t\t\t<li><img src="./%s" title="%s" /></li>\n'
-                              % (pic_name, pic['caption_render'])).encode('utf-8'))
+            time_model = {'N': '', 'Y': pic_time[1:5], 'M': pic_time[1:8]}
+            time_part = time_model.get('N', '')
+            weibo_file.write((u'\t\t\t<li><img src="./%s/%s" /></li>\n'
+                              % (time_part, pic_name)).encode('utf-8'))
             # continue
             # 保存图片
-            file_path = os.path.join(path,pic_name.encode('utf-8'))
+            time_path = os.path.join(path,time_part)
+            if not os.path.exists(time_path):
+                os.makedirs(time_path)
+            file_path = os.path.join(time_path,pic_name.encode('utf-8'))
             if not os.path.exists(file_path):
                 print((u'% 3d / % 3d. download %d%% : %s'
                       % (download_num, pic_num, download_num * 100 / pic_num, pic_name)).encode('utf-8'))
@@ -248,19 +272,99 @@ def download_pic(pic_json, path, download_num, download_error,
                 print((u'% 3d / % 3d. download %d%% : File already exists! Ignore download.'
                       % (download_num, pic_num, download_num * 100 / pic_num)).encode('utf-8'))
                 # continue
-        except Exception,e:
+        except BaseException,e:
             print((u'\n----------\n\nThis picture download failed!\n Picture url: %s\n'
                   ' Error: %s\n\n----------\n' % (pic_url, e)).encode('utf-8'))
             download_error += 1
     return download_num, download_error, last_pic_name, pic_index
 
 
-def get_weibo_pic_run(url, amount=99999):
+def get_albums_pic(album, name, uid, info_file, amount, down_model):
+    """下载相册内图片
+
+    Args:
+        album: 相册json数据
+        name: 用户名
+        uid: 用户UID
+        info_file: 相册信息文件句柄
+        amount: 要下载的信息数量.
+        down_model: 下载模式.
+            True 只下载微博配图
+            False 下载全部相册
+
+    Returns:
+        下载图片，显示信息.
+    """
+    # 获取相册信息
+    album_id = album['album_id']
+    caption = album['caption']
+    pic_num = int(album['count']['photos'])
+    pic_type = album['type']
+    album_name = ('%s' % caption).decode('utf-8')
+    # 图片存储路径
+    path_name = os.path.join(name, album_name)
+    try:
+        # 微博配图没有这个数据，所以可以用于判断是否为微博配图
+        is_set = album['cover_photo_id']
+        pic_count = amount
+        if down_model:
+            return #当只需要微博配图时
+    except:
+        # 【微博配图】相册只能一次取30条数据
+        pic_count = 30
+    if pic_num:
+        pic_num = pic_num if pic_num < amount else amount
+        # 创建路径
+        path = create_path(path_name)
+        # 下载所用变量初始化（已下载数，下载失败数，上一个图片名，图片序号）
+        download_num, download_error, last_pic_name, pic_index = 0, 0, '', 1
+        print((u'%s : Total %s , downloading...' % (album_name, pic_num)).encode('utf-8'))
+        # 总页数
+        count_page = int(math.ceil(pic_num / pic_count))
+        current_page = 1
+        # 存储相册内微博具体信息
+        with open(os.path.join(path,'微博信息.html'), 'w') as weibo_file:
+            weibo_file.write(html_meta)
+            # 样式
+            weibo_file.write(html_css)
+            # 脚本
+            weibo_file.write(html_js)
+            # 相册信息
+            weibo_file.write('<h2 class="tags">#  %s</h2>\n'
+                             '<div class="update">更新时间：%s</div>\n'
+                             '<div class="num">图片数量：%d</div>\n'
+                             '<div class="weibo">\n' % (album_name, format_time(), pic_num))
+            for i in range(count_page):
+                print((u'\n---\ncurrent: %s / count: %s ' % (current_page, count_page)).encode('utf-8'))
+                # continue
+                # 获取相册json信息
+                pic_json = get_pic_list_json(uid, album_id, pic_type, current_page, pic_count)
+                # 下载图片，保存下载信息
+                download_num, download_error, last_pic_name, pic_index = download_pic(
+                    pic_json, path, download_num, download_error,
+                    last_pic_name, pic_index, weibo_file, pic_num)
+                current_page += 1
+            # 闭合标签
+            weibo_file.write('\t\t</ul>\n\t</div>\n</div>\n')
+        info_file.write('%s<h2 class="tags">#  %s</h2>\n'
+                        '<div class="update">更新时间：%s</div>\n'
+                        '<div class="num">图片数量：%d</div>\n'
+                        % (html_meta, album_name, format_time(), download_num))
+        print((u'download complete!\n\tsuccessful : %d\n\tfailed : %d\n'
+                               % (download_num, download_error)).encode('utf-8'))
+    else:
+        print((u'%s is empty!' % album_name).encode('utf-8'))
+
+
+def get_weibo_pic_run(url, amount, down_model):
     """运行.
 
     Args:
         url: 微博用户首页链接.
         amount: 要下载的信息数量.
+        down_model: 下载模式.
+            True 只下载微博配图
+            False 下载全部相册
 
     Returns:
         下载图片，显示信息.
@@ -274,65 +378,14 @@ def get_weibo_pic_run(url, amount=99999):
         # 存储各相册概略信息
         info_path = create_path(name)
         with open(os.path.join(info_path,'相册信息.html'), 'w') as info_file:
-            for album in albums_json['data']['album_list']:
-                # 获取相册信息
-                album_id = album['album_id']
-                caption = album['caption']
-                pic_num = int(album['count']['photos'])
-                pic_type = album['type']
-                album_name = ('%s' % caption).decode('utf-8')
-                # 图片存储路径
-                path_name = os.path.join(name, album_name)
-                try:
-                    # 微博配图没有这个数据，所以可以用于判断是否为微博配图
-                    is_set = album['cover_photo_id']
-                    pic_count = amount
-                    continue #当只需要微博配图时，可以取消此处注释
-                except:
-                    # 【微博配图】相册只能一次取30条数据
-                    pic_count = 30
-                if pic_num:
-                    pic_num = pic_num if pic_num < amount else amount
-                    # 创建路径
-                    path = create_path(path_name)
-                    # 下载所用变量初始化（已下载数，下载失败数，上一个图片名，图片序号）
-                    download_num, download_error, last_pic_name, pic_index = 0, 0, '', 1
-                    print((u'%s : Total %s , downloading...' % (album_name, pic_num)).encode('utf-8'))
-                    # 总页数
-                    count_page = int(math.ceil(pic_num / pic_count))
-                    current_page = 1
-                    # 存储相册内微博具体信息
-                    with open(os.path.join(path,'微博信息.html'), 'w') as weibo_file:
-                        weibo_file.write('<meta content="text/html; charset=utf-8" http-equiv="Content-Type" />\n')
-                        # 样式
-                        weibo_file.write('\n<style type="text/css">* {padding: 0px; margin: 0px; } body {margin: 0px auto; max-width: 1000px; padding: 10px; } .update, .num {padding: 10px 0px; font-weight: bolder; color: grey; } ul::after {content:""; display: block; clear: both; } li {float: left; list-style: none; margin: 5px; border: 1px solid gold; padding: 1px; box-shadow: 0 0 5px gold; } .pic img {max-height: 100px; max-width: 100px; cursor: zoom-in; } .weibo {border-radius: 15px; border: 1px solid grey; padding: 10px; box-shadow: 0 0 5px grey; } .time {border-radius: 5px; border: 1px solid pink; padding: 2px; box-shadow: 0 0 5px pink; margin-bottom: 5px; } .content {border-radius: 5px; border: 1px solid lightblue; padding: 2px; box-shadow: 0 0 5px lightblue; margin-bottom: 5px; } .pic {border-radius: 5px; border: 1px solid lightblue; padding: 2px; box-shadow: 0 0 5px lightblue; margin-bottom: 25px; }</style>\n')
-                        # 脚本
-                        # weibo_file.write('\n<script type="text/javascript">window.onload=function(){var img = document.querySelectorAll(".pic img"); var len = img.length; for (var i = 0; i < len; i++){img[i].onclick = function(){if (this.offsetWidth <= 100 || this.offsetHeight <= 100){var width = window.innerWidth > this.naturalWidth ? this.naturalWidth : window.innerWidth - 10; var height = window.innerHeight > this.naturalHeight ? this.naturalHeight : window.innerHeight - 10; this.style.maxWidth = this.naturalWidth; this.style.maxHeight = this.naturalHeight; this.style.cursor = "zoom-out"; }else{this.style.maxWidth = 100; this.style.maxHeight = 100; this.style.cursor = "zoom-in"; } } } }</script>\n')
-                        weibo_file.write('\n<script type="text/javascript" src="../../weibo.js"></script>\n')
-                        # 相册信息
-                        weibo_file.write('<h2 class="tags">#  %s</h2>\n'
-                                         '<div class="update">更新时间：%s</div>\n'
-                                         '<div class="num">图片数量：%d</div>\n'
-                                         '<div class="weibo">\n' % (album_name, format_time(), pic_num))
-                        for i in range(count_page):
-                            print((u'\n---\ncurrent: %s / count: %s ' % (current_page, count_page)).encode('utf-8'))
-                            # continue
-                            # 获取相册json信息
-                            pic_json = get_pic_list_json(uid, album_id, pic_type, current_page, pic_count)
-                            # 下载图片，保存下载信息
-                            download_num, download_error, last_pic_name, pic_index = download_pic(pic_json, path, download_num, download_error,
-                                                                                                  last_pic_name, pic_index, weibo_file, pic_num)
-                            current_page += 1
-                        # 闭合标签
-                        weibo_file.write('\t\t</ul>\n\t</div>\n</div>\n')
-                    info_file.write('<h2 class="tags">#  %s</h2>\n'
-                                    '<div class="update">更新时间：%s</div>\n'
-                                    '<div class="num">图片数量：%d</div>\n'
-                                    % (album_name, format_time(), download_num))
-                    print((u'download complete!\n\tsuccessful : %d\n\tfailed : %d\n'
-                                           % (download_num, download_error)).encode('utf-8'))
-                else:
-                    print((u'%s is empty!' % album_name).encode('utf-8'))
+            # 开启多线程下载相册图片
+            thread_list = [threading.Thread(target=get_albums_pic,
+                           args=(album, name, uid, info_file, amount, down_model))
+                           for album in albums_json['data']['album_list']]
+            for t in thread_list:
+                t.start()
+            for t in thread_list:
+                t.join()
     else:
         print('not found albums!')
 
@@ -348,38 +401,33 @@ def format_time(tsp=0):
     time_struct = time.localtime(tsp if tsp else time.time())
     return time.strftime("[%Y-%m-%d %H：%M：%S]", time_struct)
 
-def get_weibo_pic(urls, amounts=99999):
-    """循环下载多个用户的相册.
+def get_weibo_pic(urls, amounts=99999, down_model=False):
+    """启用多线程下载多个用户的相册.
 
     Args:
         urls: 用户链接或id字典(字典的键名只是为了标识，与程序不相关).
         amounts: 下载数量，当为数组时，按顺序与用户匹配.
+        down_model: 下载模式.
+            True 只下载微博配图
+            False 下载全部相册
 
     Returns:
         下载图片，显示信息.
     """
     if isinstance(urls, dict) and isinstance(amounts, (int, list)):
         if isinstance(amounts, int):
-            for url in urls.values():
-                get_weibo_pic_run(url, amounts)
+            thread_list = [threading.Thread(target=get_weibo_pic_run,
+                           args=(url, amounts, down_model)) for url in urls.values()]
         elif isinstance(amounts, list):
-            for url,amount in zip(urls.values(), amounts):
-                get_weibo_pic_run(url, amount)
+            thread_list = [threading.Thread(target=get_weibo_pic_run,
+                           args=(url, amount, down_model)) for url,amount in zip(urls.values(), amounts)]
+        for t in thread_list:
+            t.start()
+        for t in thread_list:
+            t.join()
     else:
         raise TypeError('Unexpect Arguement Type!')
-# --------------------------------------------------------------------------------------
-
-
-def pr_e(arg='STOP'):
-    """断点调试.
-    """
-    try:
-        print(json.dumps(arg, sort_keys=True, indent=4))
-        print(' ↑↑\n ↑↑\tIt`s used json.dumps().\n')
-    except:
-        print(arg)
-    exit()
-
+# --------------------------------------------------------------
 
 if __name__ == '__main__':
     start = time.clock()
@@ -396,7 +444,14 @@ if __name__ == '__main__':
                 # 'XiaoJu': '3669102477',
                 # 'Sheep': '5228056212',
                 # 'LuBao': '5229864870',
-                # 'lulihuntui': '5581868113'
+                # 'WanQing': '5229579490',
+                # 'coco': '5460952383',
+                # 'RanRan': '5479678683',
+                # 'yyy': '5490958194',
+                # 'lulihuntui': '5581868113',
+
+                'test1': '5047712285',
+                'test2': '2390627070',
             })
     except requests.exceptions.ConnectionError, e:
         print('Network connect failed!\n\tError: %s' % e)
