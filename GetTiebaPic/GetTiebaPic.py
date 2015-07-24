@@ -13,7 +13,6 @@ import sys
 reload(sys)
 sys.setdefaultencoding("utf-8")
 
-
 def get_info(url):
     """获取url信息
 
@@ -275,6 +274,9 @@ if __name__ == '__main__':
         # '3789151741',
         # '3191028878',
         # '3377735261',
+        # '3752868261',
+
+        'http://tieba.baidu.com/p/2522915602'
     ]
     get_tieba_pic(urls)
 

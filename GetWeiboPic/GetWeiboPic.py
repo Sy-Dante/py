@@ -17,6 +17,7 @@ from bs4 import BeautifulSoup
 # logging.basicConfig(level=logging.DEBUG)
 
 from WBLogin import wblogin
+import WeiboDB
 
 reload(sys)
 sys.setdefaultencoding("utf-8")
@@ -83,7 +84,12 @@ def get_album_list_json(uid):
     """
     alb_list_url = 'http://photo.weibo.com/albums/get_all?uid=%s&count=99' % uid
     albums_content = session.get(alb_list_url).content
-    albums_json = json.loads(unicode(albums_content, 'cp936'))
+    try:
+        albums_json = json.loads(unicode(albums_content, 'ISO-8859-2')) # cp936
+    except Exception, e:
+        print('####### %s' % alb_list_url)
+        logging.exception(e)
+        time.sleep(5)
     # pr_e(albums_json)
     return albums_json
 
@@ -103,8 +109,12 @@ def get_pic_list_json(uid, album_id, pic_type, pic_page, pic_count):
                     'uid=%s&album_id=%s&type=%s&page=%s&count=%s' %
                     (uid, album_id, pic_type, pic_page, pic_count))
     pic_content = session.get(pic_list_url).content
-    # print(chardet.detect(pic_content))
-    pic_json = json.loads(unicode(pic_content, 'ISO-8859-2'))
+    try:
+        pic_json = json.loads(unicode(pic_content, 'ISO-8859-2'))
+    except Exception, e:
+        print('####### %s' % pic_list_url)
+        logging.exception(e)
+        time.sleep(5)
     # pr_e(pic_json)
     return pic_json
 
@@ -153,7 +163,8 @@ def download_pic(pic_json, path, download_num, download_error,
             caption = pic['caption_render'].decode('utf-8')[:80].encode('utf-8')
             pic_caption = re.sub('[\\\/\:\*\?\|\"<>]', '_', caption)
             pic_content = pic['caption']
-            pic_ext = os.path.splitext(pic['pic_name'])[1]
+            # 2010-11月以前[pic_name]没有带文件拓展名
+            pic_ext = os.path.splitext(pic['pic_name'])[1] if os.path.splitext(pic['pic_name'])[1] else '.jpg'
             pic_name = u'%s%s' % (pic_time, pic_caption)
             # 判断是否属于同一微博图片
             if pic_name == last_pic_name:
@@ -171,9 +182,11 @@ def download_pic(pic_json, path, download_num, download_error,
             last_pic_name = pic_name
             pic_name = u'%s[%d]%s%s' % (pic_time, pic_index, pic_caption, pic_ext)
             pic_name = re.sub('#', '＃', pic_name)
+            # 按时间创建文件夹: N-不按时间分类，Y-按年分类，M-按月分类
+            time_models = {'N': '', 'Y': pic_time[1:5], 'M': pic_time[1:8]}
+            global dir_model
+            time_part = time_models.get(dir_model, '')
             # 写入图片信息
-            time_model = {'N': '', 'Y': pic_time[1:5], 'M': pic_time[1:8]}
-            time_part = time_model.get('N', '')
             weibo_file.write((u'\t\t\t<li><img src="./%s/%s" /></li>\n' %
                              (time_part, pic_name)).encode('utf-8'))
             # continue
@@ -182,18 +195,19 @@ def download_pic(pic_json, path, download_num, download_error,
             if not os.path.exists(time_path):
                 os.makedirs(time_path)
             file_path = os.path.join(time_path,pic_name.encode('utf-8'))
+            download_percent = download_num * 100 / pic_num
             if not os.path.exists(file_path):
                 print((u'% 3d / % 3d. download %d%% : %s' %
                       (download_num, pic_num,
-                      download_num * 100 / pic_num, pic_name)).encode('utf-8'))
+                      download_percent, pic_name)).encode('utf-8'))
                 fpic = requests.get(pic_url).content
                 with open(file_path, 'wb') as f:
                     f.write(fpic)
                 global pub_count
                 pub_count += 1
             else:
-                print((u'% 3d / % 3d. download %d%% : File already exists! Ignore download.' %
-                      (download_num, pic_num, download_num * 100 / pic_num)).encode('utf-8'))
+                print((u'% 3d / % 3d. download %d%% : %sFile already exists! Ignore download.' %
+                      (download_num, pic_num, download_percent, pic_time)).encode('utf-8'))
                 global pub_jump
                 pub_jump += 1
                 continue
@@ -230,7 +244,7 @@ def get_albums_pic(album, name, uid, info_file, amount, download_only_weibo_map)
     try:
         # 微博配图没有这个数据，所以可以用于判断是否为微博配图
         is_set = album['cover_photo_id']
-        pic_count = amount
+        pic_count = 100
         if download_only_weibo_map:
             return #当只需要微博配图时
     except:
@@ -260,8 +274,8 @@ def get_albums_pic(album, name, uid, info_file, amount, download_only_weibo_map)
                              '<div class="weibo">\n' %
                              (album_name, format_time(), pic_num))
             for i in range(count_page):
-                print((u'\n---\ncurrent: %s / count: %s ' %
-                      (current_page, count_page)).encode('utf-8'))
+                print((u'\n---limit:%s\ncurrent: %s / count: %s ' %
+                      (pic_count, current_page, count_page)).encode('utf-8'))
                 # continue
                 # 获取相册json信息
                 pic_json = get_pic_list_json(uid, album_id, pic_type, current_page, pic_count)
@@ -275,7 +289,7 @@ def get_albums_pic(album, name, uid, info_file, amount, download_only_weibo_map)
         info_file.write('%s<h2 class="tags">#  %s</h2>\n'
                         '<div class="update">更新时间：%s</div>\n'
                         '<div class="num">图片数量：%d</div>\n' %
-                        (html_meta, album_name, format_time(), download_num))
+                        (html_meta, album_name, format_time(album['updated_at_int']), download_num))
         print((u'download complete!\n\tsuccessful : %d\n\tfailed : %d\n' %
               (download_num, download_error)).encode('utf-8'))
         global pub_total
@@ -285,8 +299,7 @@ def get_albums_pic(album, name, uid, info_file, amount, download_only_weibo_map)
     else:
         print((u'%s is empty!' % album_name).encode('utf-8'))
 
-
-def run(url, amount, download_only_weibo_map):
+def run(url, amount, download_only_weibo_map, is_thread):
     """运行.
 
     Args:
@@ -295,6 +308,7 @@ def run(url, amount, download_only_weibo_map):
         download_only_weibo_map: 下载模式.
             True 只下载微博配图
             False 下载全部相册
+        is_thread: 是否启用多线程
 
     Returns:
         下载图片，显示信息.
@@ -313,10 +327,16 @@ def run(url, amount, download_only_weibo_map):
                            args=(album, name, uid, info_file, amount, download_only_weibo_map),
                            name=(name + '_' + album['caption'].encode('utf-8')))
                            for album in albums_json['data']['album_list']]
-            for t in thread_list:
-                t.start()
-            for t in thread_list:
-                t.join()
+            if is_thread is True:
+                for t in thread_list:
+                    t.start()
+                for t in thread_list:
+                    t.join()
+            else:
+                for t in thread_list:
+                    t.start()
+                    t.join()
+            info_file.write('<h4>文件更新时间:<em>%s</em></h4>' % format_time())
     else:
         print('not found albums!')
 
@@ -332,7 +352,7 @@ def format_time(tsp=0):
     time_struct = time.localtime(tsp if tsp else time.time())
     return time.strftime("[%Y-%m-%d %H：%M：%S]", time_struct)
 
-def get_weibo_pic(urls, amounts=99999, download_only_weibo_map=False):
+def get_weibo_pic(urls, amounts=99999, download_only_weibo_map=False, is_thread=True):
     """启用多线程下载多个用户的相册.
 
     Args:
@@ -341,6 +361,7 @@ def get_weibo_pic(urls, amounts=99999, download_only_weibo_map=False):
         download_only_weibo_map: 下载模式.
             True 只下载微博配图
             False 下载全部相册
+        is_thread: 是否启用多线程
 
     Returns:
         下载图片，显示信息.
@@ -352,6 +373,8 @@ def get_weibo_pic(urls, amounts=99999, download_only_weibo_map=False):
         global pub_jump
         global pub_error
         global session
+        global dir_model
+        dir_model='N'
         pub_total = 0
         pub_count = 0
         pub_jump = 0
@@ -362,22 +385,41 @@ def get_weibo_pic(urls, amounts=99999, download_only_weibo_map=False):
         pw = conf.get('weibo', 'pw')
         session = wblogin(name, pw)
         if isinstance(urls, dict) and isinstance(amounts, (int, list)):
-            if isinstance(amounts, int):
-                thread_list = [threading.Thread(
-                               target=run,
-                               args=(url, amounts, download_only_weibo_map),
-                               name=key)
-                               for key, url in urls.iteritems()]
-            elif isinstance(amounts, list):
-                thread_list = [threading.Thread(
-                               target=run,
-                               args=(url, amount, download_only_weibo_map),
-                               name=key)
-                               for key, url, amount in zip(urls.keys(), urls.values(), amounts)]
-            for t in thread_list:
-                t.start()
-            for t in thread_list:
-                t.join()
+            for i in range(5):
+                if isinstance(amounts, int):
+                    thread_list = [threading.Thread(
+                                   target=run,
+                                   args=(url, amounts, download_only_weibo_map, is_thread),
+                                   name=key)
+                                   for key, url in urls.iteritems()]
+                elif isinstance(amounts, list):
+                    thread_list = [threading.Thread(
+                                   target=run,
+                                   args=(url, amount, download_only_weibo_map, is_thread),
+                                   name=key)
+                                   for key, url, amount in zip(urls.keys(), urls.values(), amounts)]
+                else:
+                    break
+                if is_thread is True:
+                    for t in thread_list:
+                        t.start()
+                    for t in thread_list:
+                        t.join()
+                else:
+                    for t in thread_list:
+                        t.start()
+                        t.join()
+                if pub_error == 0:
+                    break
+                else:
+                    runtime = time.clock() - start
+                    print('\n-------------\nrun time: %dmin %dsec\ntotal: %d\ndownload: %d\njump: %d\nerror: %d\n------continue(%d)---\n' %
+                          (runtime//60, runtime%60, pub_total, pub_count, pub_jump, pub_error, i))
+                    pub_total = 0
+                    pub_count = 0
+                    pub_jump = 0
+                    pub_error = 0
+                    time.sleep(5)
         else:
             raise TypeError('Unexpect Arguement Type!')
     except requests.exceptions.ConnectionError, e:
@@ -388,31 +430,64 @@ def get_weibo_pic(urls, amounts=99999, download_only_weibo_map=False):
     finally:
         runtime = time.clock() - start
         print('\n-------------\nrun time: %dmin %dsec\ntotal: %d\ndownload: %d\njump: %d\nerror: %d' %
-              (runtime // 60, runtime % 60, pub_total, pub_count, pub_jump, pub_error))
+              (runtime//60, runtime%60, pub_total, pub_count, pub_jump, pub_error))
         os.system('pause')
 
 if __name__ == '__main__':
-    get_weibo_pic({
-        'XiaoAi': 3050708243,
-        'LuLi': 3669076064,
-        'XiaoJu': 3669102477,
-        'Sheep': 5228056212,
-        'Monster': 5230466807,
-        'LuBao': 5229864870,
-        'WanQing': 5229579490,
-        'kuma-李清扬': 5231168847,
-        'coco': 5460952383,
-        'RanRan': 5479678683,
-        'yyy': 5490958194,
-        'lulihuntui': 5581868113,
-        'zyfan': 2316839037,
+    with WeiboDB.WeiboDB() as db:
+        urls = db.selectDict()
+    get_weibo_pic(urls, 120, download_only_weibo_map=False, is_thread=False)
 
-        # 'test1': 5047712285,
-        # 'test2': 2390627070,
 
-        # # '夏奈-杨吟雨': 5225561029,
-    }, download_only_weibo_map=False)
 
+
+
+"""
+{
+    # Team SⅡ
+    'XiaoAi': 3050708243,
+    'SiSi': 3050742117,
+    # Team NⅡ
+    'LuLi': 3669076064,
+    'kiku': 3669102477,
+    # Team HⅡ
+    'Sheep': 5228056212,
+    'Monster': 5230466807,
+    'LuBao': 5229864870,
+    'WanQing': 5229579490,
+    'kuma-李清扬': 5231168847,
+    # Team X
+    'Maruko': 5490958194,
+    'coco': 5460952383,
+    'RanRan': 5479678683,
+    'ws': 5491330253,
+
+    # Team Fans
+    # 'SoRuri': 5581868113,
+    # '会长fans-加菲': 2316839037, # 大图 撸力
+    # '孟孟fans-微凉': 1837085131, # 小图
+    # # 400
+    # '大哥fans-芒果': 278332254, # 30+ ++ 大图
+    # '小菊fans-双子座': 2623190960, # 30+ ++ 大图
+    # '小菊fans-Eg': 3240835062, # 60+ ++ 大图
+    # '阿黄fans-zzh': 1889585464, # 160+ ++ 大图
+    # '阿黄fans-雪山': 1701598311, # 300+ ++ 大图
+    # '小菊fans-zxs': 1694575520, # 350+ ++ 大图
+
+    # '小四fans-塞纳河': 5473551372, # 600+ 大图
+    # '发卡fans-山里人': 1533507090, # 1600+ 大图
+    # '小菊fans-Wils': 1244586691, # 3300+ 大图
+    # '阿黄fans-Sy_桃': 2195845005, # 150+ 小图
+    # '小菊fans-LY': 2252395501, # 600+ 小图
+    # '朵朵fans-115': 2962312110, # 750+ -- 小图
+
+    # 'test1': 5047712285,
+    # 'test2': 2390627070,
+
+    # Team Out
+    # # '夏奈-杨吟雨': 5225561029,
+}
+"""
 
 # 相册列表json数据格式：http://photo.weibo.com/albums/get_all?uid=5228056212&count=5
 """
@@ -451,7 +526,7 @@ if __name__ == '__main__':
                 "updated_at_int": 1427886244, 
                 "usort": null
             }, 
-            and so on...
+            //and so on...
         ], 
         "total": 4
     }, 
@@ -507,7 +582,7 @@ if __name__ == '__main__':
                 "visible": 1, 
                 "visible_type": null
             }, 
-            and so on...
+            //and so on...
         ], 
         "total": 11
     }, 
