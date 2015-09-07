@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""微博数据库操作"""
 from __future__ import absolute_import, division, print_function, unicode_literals
 import os
-import logging
 import sqlite3
 
-# weibo:id[int], nickname[varchar(20)], weibo_id[int], download[int]
-
 class WeiboDB(object):
+    """微博数据库操作
+    """
 
     def __init__(self):
         db_dir = 'data'

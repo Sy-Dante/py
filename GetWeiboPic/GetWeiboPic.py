@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+"""获取微博图片"""
 from __future__ import absolute_import, division, print_function, unicode_literals
 import os
 import sys
@@ -66,12 +67,12 @@ def get_user_info(url):
         content = session.get(url).content
         soup = BeautifulSoup(content)
         # 获取微博名
-        name = soup.find('meta', attrs={'name' : 'keywords'})['content'].split('，')[0]
+        name = soup.find('meta', attrs={'name': 'keywords'})['content'].split('，')[0]
     except Exception:
         name = uid
     msg = u'Weibo name is : %s\n' % name
     print(msg.encode('utf-8'))
-    return name, uid
+    return (name, uid)
 
 def get_album_list_json(uid):
     """获取用户相册列表json信息.
@@ -191,10 +192,10 @@ def download_pic(pic_json, path, download_num, download_error,
                              (time_part, pic_name)).encode('utf-8'))
             # continue
             # 保存图片
-            time_path = os.path.join(path,time_part)
+            time_path = os.path.join(path, time_part)
             if not os.path.exists(time_path):
                 os.makedirs(time_path)
-            file_path = os.path.join(time_path,pic_name.encode('utf-8'))
+            file_path = os.path.join(time_path, pic_name.encode('utf-8'))
             download_percent = download_num * 100 / pic_num
             if not os.path.exists(file_path):
                 print((u'% 3d / % 3d. download %d%% : %s' %
@@ -211,11 +212,11 @@ def download_pic(pic_json, path, download_num, download_error,
                 global pub_jump
                 pub_jump += 1
                 continue
-        except BaseException,e:
+        except BaseException, e:
             print((u'\n----------\n\nThis picture download failed!\n Picture url: %s\n'
                   ' Error: %s\n\n----------\n' % (pic_url, e)).encode('utf-8'))
             download_error += 1
-    return download_num, download_error, last_pic_name, pic_index
+    return (download_num, download_error, last_pic_name, pic_index)
 
 def get_albums_pic(album, name, uid, info_file, amount, download_only_weibo_map):
     """下载相册内图片
@@ -241,6 +242,7 @@ def get_albums_pic(album, name, uid, info_file, amount, download_only_weibo_map)
     album_name = ('%s' % caption).decode('utf-8')
     # 图片存储路径
     path_name = os.path.join(name, album_name)
+    if caption == '面孔专辑':return
     try:
         # 微博配图没有这个数据，所以可以用于判断是否为微博配图
         is_set = album['cover_photo_id']
@@ -261,7 +263,7 @@ def get_albums_pic(album, name, uid, info_file, amount, download_only_weibo_map)
         count_page = int(math.ceil(pic_num / pic_count))
         current_page = 1
         # 存储相册内微博具体信息
-        with open(os.path.join(path,'微博信息.html'), 'w') as weibo_file:
+        with open(os.path.join(path, '微博信息.html'), 'w') as weibo_file:
             weibo_file.write(html_meta)
             # 样式
             weibo_file.write(html_css)
@@ -429,13 +431,26 @@ def get_weibo_pic(urls, amounts=99999, download_only_weibo_map=False, is_thread=
         # logging.exception(e)
     finally:
         runtime = time.clock() - start
-        print('\n-------------\nrun time: %dmin %dsec\ntotal: %d\ndownload: %d\njump: %d\nerror: %d' %
-              (runtime//60, runtime%60, pub_total, pub_count, pub_jump, pub_error))
+        print('\n-------------\nrun time: %dmin %dsec\ntotal: %d\ndownload: %d\njump: %d\nerror: %d\nrun(%d)' %
+              (runtime//60, runtime%60, pub_total, pub_count, pub_jump, pub_error, i+1))
         os.system('pause')
 
+def parse_json(filename):
+    """将带注释的json文件解析为json数据
+    """
+    with open(filename, 'r') as json_info:
+        json_str = json_info.read()
+    json_str = re.sub(r'//.*?\n', '', json_str)
+    json_str = re.sub(r'[ |\n]', '', json_str)
+    json_str = re.sub(r',\}', '}', json_str)
+    return json.loads(json_str)
+
 if __name__ == '__main__':
-    with WeiboDB.WeiboDB() as db:
-        urls = db.selectDict()
+    # with WeiboDB.WeiboDB() as db:
+    #     urls = db.selectDict()
+
+    urls = parse_json('data/weibo.json')
+
     get_weibo_pic(urls, 120, download_only_weibo_map=False, is_thread=False)
 
 
