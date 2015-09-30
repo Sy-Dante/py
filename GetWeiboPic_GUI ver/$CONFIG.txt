@@ -1,0 +1,21 @@
+var：
+session
+dir_model
+	$CONFIG['islogin']='1'; 
+	$CONFIG['oid']='2689280541'; 
+	$CONFIG['page_id']='1004062689280541'; 
+	$CONFIG['onick']='SNH48'; 
+
+func：
+
+获取相册列表json(uid)
+
+获取图片列表json(uid, album_id, pic_type, pic_page, pic_count)
+
+下载多成员(uids)
+
+下载成员
+
+下载相册
+
+下载图片
