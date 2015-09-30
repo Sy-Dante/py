@@ -18,7 +18,6 @@ from bs4 import BeautifulSoup
 # logging.basicConfig(level=logging.DEBUG)
 
 from WBLogin import wblogin
-import WeiboDB
 
 reload(sys)
 sys.setdefaultencoding("utf-8")
@@ -446,9 +445,6 @@ def parse_json(filename):
     return json.loads(json_str)
 
 if __name__ == '__main__':
-    # with WeiboDB.WeiboDB() as db:
-    #     urls = db.selectDict()
-
     urls = parse_json('data/weibo.json')
 
     get_weibo_pic(urls, 120, download_only_weibo_map=False, is_thread=False)
