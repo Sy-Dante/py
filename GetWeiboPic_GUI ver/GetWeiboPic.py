@@ -13,7 +13,7 @@ import requests
 import threading
 import Tkinter as Tk
 import ttk
-from bs4 import BeautifulSoup
+
 # import chardet
 # logging.basicConfig(level=logging.DEBUG)
 
@@ -63,18 +63,9 @@ class LoginError(Exception):
 
 class GetWeiboPic(object):
 
-    def __init__(self, session, parent=None, amount=99999, dir_model='N', is_thread=True):
-        self.session = session
-        self.amount = amount
-        self.dir_model = dir_model
-        self.is_thread = is_thread
-        self.fm = Tk.Frame(parent)
-        self._msg = Tk.StringVar()
-        Tk.Label(parent, text=self._msg, fg='green').pack()
-
     def _getJson(self, url):
         try:
-            content = self.session.get(url).content
+            content = self._session.get(url).content
             the_json = json.loads(unicode(content, 'ISO-8859-2')) # cp936
         except requests.exceptions.ConnectionError, e:
             raise LoginError('网络连接失败！')
@@ -103,6 +94,7 @@ class GetWeiboPic(object):
             uid: 用户UID.
             album_id: 相册ID.
             pic_type: 从返回json中获得，意义不明.
+            pic_page: 所在页
             pic_count: 要取得的信息量.
 
         Returns:
@@ -113,9 +105,9 @@ class GetWeiboPic(object):
                         (uid, album_id, pic_type, pic_page, pic_count))
         return self._getJson(pic_list_url)
 
-    def downloadPic(self, pic_json, path, download_num, 
+    def _downloadPic(self, pic_json, path, download_num, 
             download_error, last_pic_name, pic_index, pic_num, pbar):
-        """下载图片.
+        """下载图片，最底层下载方法。
 
         Args:
             pic_json: 图片列表json数据.
@@ -176,7 +168,7 @@ class GetWeiboPic(object):
                     print((u'% 3d / % 3d. download %d%% : %sFile already exists! Ignore download.' %
                           (download_num, pic_num, download_percent, pic_time)).encode('utf-8'))
                     self._pub_jump += 1
-            except BaseException, e:
+            except IOError, e:
                 print((u'\n----------\n\nThis picture download failed!\n Picture url: %s\n'
                       ' Error: %s\n\n----------\n' % (pic_url, e)).encode('utf-8'))
                 download_error += 1
@@ -184,13 +176,13 @@ class GetWeiboPic(object):
         return (download_num, download_error, last_pic_name, pic_index)
 
     def getAlbumsPic(self, album, name, uid, info_file):
-        """下载相册内图片
+        """下载相册内图片，根据相册json，调用self._downloadPic()下载
 
         Args:
             album: 相册json数据
             name: 用户名
             uid: 用户UID
-            info_file: 相册信息文件句柄
+            info_file: 相册信息文件句柄，收集各相册信息
 
         Returns:
             下载图片，显示信息.
@@ -208,7 +200,7 @@ class GetWeiboPic(object):
             # 微博配图没有这个数据，所以可以用于判断是否为微博配图
             is_set = album['cover_photo_id']
             pic_count = 100
-        except:
+        except KeyError:
             # 【微博配图】相册只能一次取30条数据
             pic_count = 30
         if pic_num:
@@ -217,6 +209,7 @@ class GetWeiboPic(object):
             # 创建进度条
             pbar = PBar(self.fm, '%s_%s' % (name, album_name), pic_num)
             pbar.pack()
+            self.fm.update()
             # 创建路径
             path = create_path(path_name)
             # 下载所用变量初始化（已下载数，下载失败数，上一个图片名，图片序号）
@@ -232,7 +225,7 @@ class GetWeiboPic(object):
                 # 获取相册json信息
                 pic_json = self.getPicListJson(uid, album_id, pic_type, current_page, pic_count)
                 # 下载图片，保存下载信息
-                download_num, download_error, last_pic_name, pic_index = self.downloadPic(
+                download_num, download_error, last_pic_name, pic_index = self._downloadPic(
                     pic_json, path, download_num, download_error,
                     last_pic_name, pic_index, pic_num, pbar)
                 current_page += 1
@@ -286,7 +279,7 @@ class GetWeiboPic(object):
         else:
             print('not found albums!')
 
-    def getWeiboPic(self, users):
+    def getWeiboPic(self, parent=None, session='', users=[], amount=99999, dir_model='N', is_thread=True):
         """启用多线程下载多个用户的相册.
 
         Args:
@@ -298,12 +291,21 @@ class GetWeiboPic(object):
         Returns:
             下载图片，显示信息.
         """
+        self._session = session
+        self.amount = amount
+        self.dir_model = dir_model
+        self.is_thread = is_thread
+        self.fm = Tk.Frame(parent)
+        self._msg = Tk.StringVar()
+        self.fm.pack()
+        Tk.Label(parent, textvariable=self._msg, fg='#191').pack()
         try:
             start = time.clock()
             self._pub_total = 0
             self._pub_count = 0
             self._pub_jump = 0
             self._pub_error = 0
+            error = ''
             # thread_list = [threading.Thread(
             #                target=self.getUserPic,
             #                args=(user,),
@@ -320,16 +322,17 @@ class GetWeiboPic(object):
             #         t.join()
             for user in users:
                 self.getUserPic(user)
-        except BaseException, e:
-            error = ('Download failed!\nError: %s\n' % e)
+        except requests.exceptions.ConnectionError, e:
+            error = 'Network connect failed!\n\tError: %s' % e
             print(error)
-            self._msg.set(error)
-            time.sleep(1)
+        except Exception, e:
+            error = 'Download failed!\nError: %s\n' % e
+            print(error)
             # logging.exception(e)
         finally:
             runtime = time.clock() - start
-            msg = ('\n-------------\nrun time: %dmin %dsec\ntotal: %d\ndownload: %d\njump: %d\nerror: %d' %
-                  (runtime//60, runtime%60, self._pub_total, self._pub_count, self._pub_jump, self._pub_error))
+            msg = ('%s\n-------------\nrun time: %dmin %dsec\ntotal: %d\ndownload: %d\njump: %d\nerror: %d' %
+                  (error, runtime//60, runtime%60, self._pub_total, self._pub_count, self._pub_jump, self._pub_error))
             print(msg)
             self._msg.set(msg)
 
@@ -362,39 +365,64 @@ class PBar(Tk.Frame):
 
 class DownloadPic(Tk.Frame):
 
-    def __init__(self, parent, users, session, amount=30, **kw):
+    def __init__(self, parent, **kw):
         Tk.Frame.__init__(self, parent, **kw)
+        self.pack()
+        self.canvas=Tk.Canvas(self, width=750, height=250)
+        self.scrollb=ttk.Scrollbar(self, orient=Tk.VERTICAL,command=self.canvas.yview)
+        self.scrollb.pack(side=Tk.RIGHT, fill=Tk.Y)
+        self.canvas['yscrollcommand'] = self.scrollb.set
+        self.canvas.pack()
+        self.canvas.bind_all("<MouseWheel>", self._onMousewheel)
+        self.wb = GetWeiboPic()
+
+    def update(self, users, session, amount=30):
         self.users = users
-        self.session = session
+        self._session = session
         self.amount = amount
 
-    def downCreate(self):
-        self.fm = Tk.Frame(self)
+    def download(self):
+        if hasattr(self, 'fm'):
+            self.fm.destroy()
+        self.fm = Tk.Frame(self.canvas)
         self.fm.pack()
-        wb = GetWeiboPic(self.session, self.fm, self.amount)
-        wb.getWeiboPic(users)
+        self.canvas.create_window((0,0), window=self.fm, tags="self.fm")
+        self.fm.bind("<Configure>", self._onFrameConfigure)
+        self._last_h = self.fm.winfo_height()
+        self.wb.getWeiboPic(self.fm, self._session, self.users, self.amount)
 
-    def downDestroy(self):
-        self.fm.destroy()
+    def _onFrameConfigure(self, event):
+        '''Reset the scroll region to encompass the inner frame'''
+        self.canvas.configure(scrollregion=self.canvas.bbox("self.fm"))
+        new_h = self.fm.winfo_height()
+        if self._last_h != new_h:
+            self._last_h = new_h
+            self.canvas.yview_moveto(1)
+
+    def _onMousewheel(self, event):
+        self.canvas.yview_scroll(-1*(event.delta//120), "units")
+
 
 if __name__ == '__main__':
 
     def get_session():
-        session = requests.session()
+        session = requests.Session()
         with open('data/cookies.txt', 'r') as f:
             cookies = f.read()
         session.cookies.update({'Cookie': cookies,})
+        session.headers.update({
+            'User-Agent':'Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/47.0.2526.8 Safari/537.36',
+        })
         return session
-
-    def run():
-        test = GetWeiboPic(get_session(), top, amount=40)
-        test.getWeiboPic([('ruri', 3669076064), ('Sheep', 5228056212)])
-
     top = Tk.Tk()
-
-    ttk.Button(top, text='run', command=run).pack()
-
+    fm = Tk.Frame(top)
+    fm.pack()
+    down_fm = DownloadPic(fm)
+    down_fm.update([('ruri', 3669076064), ('Sheep', 5228056212)], get_session())
+    ttk.Button(top, text="run", command=down_fm.download).pack()
+    down_fm.pack()
     top.mainloop()
+
 
 
 

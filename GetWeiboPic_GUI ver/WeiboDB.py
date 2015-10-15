@@ -41,10 +41,9 @@ class WeiboDB(object):
         data = arg if arg else (1,)
         sql = 'SELECT nickname, weibo_id from weibo where download in (%s)' % \
                 ','.join(['?' for x in data])
-        # print(sql)
         self.cursor.execute(sql, data)
         results = self.cursor.fetchall()
-        return {key: val for key, val in results}
+        return results
 
     def insert(self, urls):
         """插入或更新数据
