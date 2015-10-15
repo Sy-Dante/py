@@ -53,22 +53,22 @@ def get_user_info(url):
     """
     # 当输入为数字时，将它当成微博ID，拼凑完整网址
     url = str(url)
-    if url.isdigit():
-        url = 'http://weibo.com/%s' % url
-    # 获取微博ID
-    uid = urlparse.urlparse(url).path.split('/')[-1]
-    uid = re.search('[0-9]{5,20}', url).group()
-    # pr_e(uid)
-    if not uid:
-        exit('url error, please check.')
     try:
+        if url.isdigit():
+            uid = url
+            url = 'http://weibo.com/%s' % url
+        else:
+            # 获取微博ID
+            uid = urlparse.urlparse(url).path.split('/')[-1]
+            uid = re.search('[0-9]{10}', url).group()
         # 获取内容
         content = session.get(url).content
         soup = BeautifulSoup(content)
         # 获取微博名
         name = soup.find('meta', attrs={'name': 'keywords'})['content'].split('，')[0]
-    except Exception:
-        name = uid
+    except (AttributeError, TypeError):
+        print('url error, please check.')
+        exit()
     msg = u'Weibo name is : %s\n' % name
     print(msg.encode('utf-8'))
     return (name, uid)
@@ -86,7 +86,7 @@ def get_album_list_json(uid):
     albums_content = session.get(alb_list_url).content
     try:
         albums_json = json.loads(unicode(albums_content, 'ISO-8859-2')) # cp936
-    except Exception, e:
+    except UnicodeError, e:
         print('####### %s' % alb_list_url)
         logging.exception(e)
         time.sleep(5)
@@ -111,7 +111,7 @@ def get_pic_list_json(uid, album_id, pic_type, pic_page, pic_count):
     pic_content = session.get(pic_list_url).content
     try:
         pic_json = json.loads(unicode(pic_content, 'ISO-8859-2'))
-    except Exception, e:
+    except UnicodeError, e:
         print('####### %s' % pic_list_url)
         logging.exception(e)
         time.sleep(5)
@@ -211,7 +211,7 @@ def download_pic(pic_json, path, download_num, download_error,
                 global pub_jump
                 pub_jump += 1
                 continue
-        except BaseException, e:
+        except IOError, e:
             print((u'\n----------\n\nThis picture download failed!\n Picture url: %s\n'
                   ' Error: %s\n\n----------\n' % (pic_url, e)).encode('utf-8'))
             download_error += 1
@@ -248,7 +248,7 @@ def get_albums_pic(album, name, uid, info_file, amount, download_only_weibo_map)
         pic_count = 100
         if download_only_weibo_map:
             return #当只需要微博配图时
-    except:
+    except KeyError:
         # 【微博配图】相册只能一次取30条数据
         pic_count = 30
     if pic_num:
@@ -275,8 +275,8 @@ def get_albums_pic(album, name, uid, info_file, amount, download_only_weibo_map)
                              '<div class="weibo">\n' %
                              (album_name, format_time(), pic_num))
             for i in range(count_page):
-                print((u'\n---limit:%s\ncurrent: %s / count: %s ' %
-                      (pic_count, current_page, count_page)).encode('utf-8'))
+                print((u'\ncurrent: %s / count: %s ' %
+                      (current_page, count_page)).encode('utf-8'))
                 # continue
                 # 获取相册json信息
                 pic_json = get_pic_list_json(uid, album_id, pic_type, current_page, pic_count)
@@ -380,6 +380,7 @@ def get_weibo_pic(urls, amounts=99999, download_only_weibo_map=False, is_thread=
         pub_count = 0
         pub_jump = 0
         pub_error = 0
+        i = 0
         conf = ConfigParser.ConfigParser()
         conf.read('user.conf')
         name = conf.get('weibo', 'name')
@@ -425,7 +426,7 @@ def get_weibo_pic(urls, amounts=99999, download_only_weibo_map=False, is_thread=
             raise TypeError('Unexpect Arguement Type!')
     except requests.exceptions.ConnectionError, e:
         print('Network connect failed!\n\tError: %s' % e)
-    except BaseException, e:
+    except Exception, e:
         print('Download failed!\nError: %s\n' % e)
         # logging.exception(e)
     finally:
